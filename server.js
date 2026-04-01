@@ -127,8 +127,8 @@ const server = http.createServer(async (req, res) => {
 
       const calId = encodeURIComponent(CALENDAR_ID);
       const gcPath = `/calendar/v3/calendars/${calId}/events`
-        + `?timeMin=${da}T00:00:00+02:00`
-        + `&timeMax=${a}T23:59:59+02:00`
+        + `?timeMin=${encodeURIComponent(da + "T00:00:00+02:00")}`
+        + `&timeMax=${encodeURIComponent(a + "T23:59:59+02:00")}`
         + `&singleEvents=true&orderBy=startTime&maxResults=200`;
 
       const r = await gcalRequest("GET", gcPath, token, null);
