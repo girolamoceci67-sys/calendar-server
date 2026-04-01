@@ -192,4 +192,21 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, () => {
   console.log(`✅ Server avviato su porta ${PORT}`);
   console.log(`📅 Calendario: ${CALENDAR_ID}`);
+
+  // ── Ping automatico ogni 10 minuti per evitare il sleep di Render ──────────
+  const RENDER_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+  setInterval(() => {
+    const pingUrl = new URL(`${RENDER_URL}/health`);
+    const mod = pingUrl.protocol === "https:" ? https : http;
+    const req = mod.get({
+      hostname: pingUrl.hostname,
+      path:     pingUrl.pathname,
+      port:     pingUrl.port || (pingUrl.protocol === "https:" ? 443 : 80),
+    }, (res) => {
+      console.log(`🏓 Ping ${new Date().toLocaleTimeString("it-IT")} → ${res.statusCode}`);
+    });
+    req.on("error", (e) => console.log(`⚠️ Ping fallito: ${e.message}`));
+    req.end();
+  }, 10 * 60 * 1000); // ogni 10 minuti
+  console.log(`🏓 Ping automatico attivo ogni 10 minuti`);
 });
