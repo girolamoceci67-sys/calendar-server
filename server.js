@@ -23,15 +23,15 @@ const PORT          = parseInt(process.env.PORT || "3000");
 // ── Ottieni access token da refresh token ────────────────────────────────────
 function getAccessToken() {
   return new Promise((resolve, reject) => {
-    const body = JSON.stringify({
-      client_id:     CLIENT_ID,
-      client_secret: CLIENT_SECRET,
-      refresh_token: REFRESH_TOKEN,
-      grant_type:    "refresh_token",
-    });
+    const params = [
+      "client_id="     + encodeURIComponent(CLIENT_ID),
+      "client_secret=" + encodeURIComponent(CLIENT_SECRET),
+      "refresh_token=" + encodeURIComponent(REFRESH_TOKEN),
+      "grant_type=refresh_token",
+    ].join("&");
     const req = https.request(
       { hostname: "oauth2.googleapis.com", path: "/token", method: "POST",
-        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) } },
+        headers: { "Content-Type": "application/x-www-form-urlencoded", "Content-Length": Buffer.byteLength(params) } },
       (res) => {
         let data = "";
         res.on("data", c => data += c);
@@ -39,13 +39,13 @@ function getAccessToken() {
           try {
             const j = JSON.parse(data);
             if (j.access_token) resolve(j.access_token);
-            else reject(new Error(j.error_description || "Token error"));
+            else reject(new Error(j.error_description || j.error || "Token error"));
           } catch(e) { reject(e); }
         });
       }
     );
     req.on("error", reject);
-    req.write(body);
+    req.write(params);
     req.end();
   });
 }
@@ -67,13 +67,11 @@ function gcalRequest(method, path, token, body) {
         res.on("end", () => {
           try { resolve({ status: res.statusCode, body: JSON.parse(data) }); }
           catch(e) { resolve({ status: res.statusCode, body: data }); }
-        });
       }
     );
     req.on("error", reject);
     if (bodyStr) req.write(bodyStr);
     req.end();
-  });
 }
 
 // ── CORS headers ─────────────────────────────────────────────────────────────
@@ -85,7 +83,6 @@ function cors(res) {
 
 // ── JSON response helper ──────────────────────────────────────────────────────
 function json(res, statusCode, obj) {
-  res.writeHead(statusCode, { "Content-Type": "application/json" });
   res.end(JSON.stringify(obj));
 }
 
@@ -97,8 +94,6 @@ function readBody(req) {
     req.on("end", () => {
       try { resolve(JSON.parse(data)); }
       catch(e) { resolve({}); }
-    });
-  });
 }
 
 // ── SERVER ────────────────────────────────────────────────────────────────────
@@ -113,7 +108,6 @@ const server = http.createServer(async (req, res) => {
 
   // ── GET /health  (test connessione) ────────────────────────────────────────
   if (req.method === "GET" && path === "/health") {
-    return json(res, 200, { ok: true, calendar: CALENDAR_ID });
   }
 
   // DEBUG endpoint
@@ -125,7 +119,6 @@ const server = http.createServer(async (req, res) => {
       const fine = new Date(); fine.setDate(fine.getDate() + 5);
       const gPath = "/calendar/v3/calendars/" + calId + "/events?timeMin=" + encodeURIComponent(now) + "&timeMax=" + encodeURIComponent(fine.toISOString()) + "&maxResults=3&singleEvents=true";
       const r = await gcalRequest("GET", gPath, token, null);
-      return json(res, 200, { tokenOk: true, gcalStatus: r.status, body: r.body });
     } catch(e) { return json(res, 200, { tokenOk: false, error: e.message }); }
   }
 
@@ -145,7 +138,6 @@ const server = http.createServer(async (req, res) => {
         + `&singleEvents=true&orderBy=startTime&maxResults=200`;
 
       const r = await gcalRequest("GET", gcPath, token, null);
-      if (r.status !== 200) return json(res, 502, { error: "Errore Google Calendar", detail: r.body });
 
       // Raggruppa orari di inizio per data  →  { "YYYY-MM-DD": ["16:30", ...] }
       const occupati = {};
@@ -157,9 +149,7 @@ const server = http.createServer(async (req, res) => {
         if (!occupati[d]) occupati[d] = [];
         occupati[d].push(t);
       }
-      return json(res, 200, { occupati });
     } catch(e) {
-      return json(res, 500, { error: e.message });
     }
   }
 
@@ -170,7 +160,6 @@ const server = http.createServer(async (req, res) => {
       const token = await getAccessToken();
 
       const { titolo, inizio, fine, luogo, descrizione } = body;
-      if (!titolo || !inizio || !fine) return json(res, 400, { error: "Dati mancanti" });
 
       const evento = {
         summary:     titolo,
@@ -189,18 +178,13 @@ const server = http.createServer(async (req, res) => {
       const r = await gcalRequest("POST", gcPath, token, evento);
 
       if (r.status === 200 || r.status === 201) {
-        return json(res, 200, { successo: true, eventId: r.body.id });
       } else {
-        return json(res, 502, { successo: false, error: r.body?.error?.message || "Errore Google" });
       }
     } catch(e) {
-      return json(res, 500, { successo: false, error: e.message });
     }
   }
 
   // 404
-  json(res, 404, { error: "Endpoint non trovato" });
-});
 
 server.listen(PORT, () => {
   console.log(`✅ Server avviato su porta ${PORT}`);
@@ -217,9 +201,7 @@ server.listen(PORT, () => {
       port:     pingUrl.port || (pingUrl.protocol === "https:" ? 443 : 80),
     }, (res) => {
       console.log(`🏓 Ping ${new Date().toLocaleTimeString("it-IT")} → ${res.statusCode}`);
-    });
     req.on("error", (e) => console.log(`⚠️ Ping fallito: ${e.message}`));
     req.end();
   }, 10 * 60 * 1000); // ogni 10 minuti
   console.log(`🏓 Ping automatico attivo ogni 10 minuti`);
-});
