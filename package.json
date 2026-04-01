@@ -1,0 +1,12 @@
+{
+  "name": "studio-ceci-calendar-server",
+  "version": "1.0.0",
+  "description": "Backend Google Calendar per Studio Legale Avv. Ceci",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
