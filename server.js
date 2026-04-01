@@ -116,6 +116,19 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { ok: true, calendar: CALENDAR_ID });
   }
 
+  // DEBUG endpoint
+  if (req.method === "GET" && path === "/debug") {
+    try {
+      const token = await getAccessToken();
+      const calId = encodeURIComponent(CALENDAR_ID);
+      const now = new Date().toISOString();
+      const fine = new Date(); fine.setDate(fine.getDate() + 5);
+      const gPath = "/calendar/v3/calendars/" + calId + "/events?timeMin=" + encodeURIComponent(now) + "&timeMax=" + encodeURIComponent(fine.toISOString()) + "&maxResults=3&singleEvents=true";
+      const r = await gcalRequest("GET", gPath, token, null);
+      return json(res, 200, { tokenOk: true, gcalStatus: r.status, body: r.body });
+    } catch(e) { return json(res, 200, { tokenOk: false, error: e.message }); }
+  }
+
   // ── GET /eventi?da=YYYY-MM-DD&a=YYYY-MM-DD ─────────────────────────────────
   if (req.method === "GET" && path === "/eventi") {
     try {
