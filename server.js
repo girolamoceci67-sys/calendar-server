@@ -1,22 +1,41 @@
-// server.js - Backend Google Calendar - Studio Legale Avv. Ceci
-const https = require("https");
-const http  = require("http");
-const url   = require("url");
+// server.js - Backend Google Calendar con Service Account
+// Studio Legale Avv. Girolamo Ceci
+const https  = require("https");
+const http   = require("http");
+const url    = require("url");
+const crypto = require("crypto");
 
-const CLIENT_ID     = process.env.GOOGLE_CLIENT_ID     || "";
-const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
-const REFRESH_TOKEN = process.env.GOOGLE_REFRESH_TOKEN || "";
-const CALENDAR_ID   = process.env.CALENDAR_ID          || "girolamo.ceci@gmail.com";
-const PORT          = parseInt(process.env.PORT         || "3000");
+const CALENDAR_ID = process.env.CALENDAR_ID || "girolamo.ceci@gmail.com";
+const PORT        = parseInt(process.env.PORT || "3000");
 
+// Service Account credentials da variabili d'ambiente
+const SA_EMAIL      = process.env.SA_EMAIL      || "";
+const SA_PRIVATE_KEY = (process.env.SA_PRIVATE_KEY || "").replace(/\\n/g, "\n");
+
+// Crea JWT per Service Account
+function createJWT() {
+  const now = Math.floor(Date.now() / 1000);
+  const header  = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+  const payload = Buffer.from(JSON.stringify({
+    iss:   SA_EMAIL,
+    scope: "https://www.googleapis.com/auth/calendar",
+    aud:   "https://oauth2.googleapis.com/token",
+    exp:   now + 3600,
+    iat:   now
+  })).toString("base64url");
+
+  const sign = crypto.createSign("RSA-SHA256");
+  sign.update(header + "." + payload);
+  const sig = sign.sign(SA_PRIVATE_KEY, "base64url");
+  return header + "." + payload + "." + sig;
+}
+
+// Ottieni access token tramite JWT
 function getAccessToken() {
   return new Promise(function(resolve, reject) {
-    var body = [
-      "client_id="     + encodeURIComponent(CLIENT_ID),
-      "client_secret=" + encodeURIComponent(CLIENT_SECRET),
-      "refresh_token=" + encodeURIComponent(REFRESH_TOKEN),
-      "grant_type=refresh_token"
-    ].join("&");
+    var jwt  = createJWT();
+    var body = "grant_type=" + encodeURIComponent("urn:ietf:params:oauth:grant-type:jwt-bearer") +
+               "&assertion=" + encodeURIComponent(jwt);
     var options = {
       hostname: "oauth2.googleapis.com",
       path: "/token",
@@ -33,7 +52,7 @@ function getAccessToken() {
         try {
           var j = JSON.parse(data);
           if (j.access_token) { resolve(j.access_token); }
-          else { reject(new Error(j.error_description || j.error || "Token error")); }
+          else { reject(new Error(j.error_description || j.error || JSON.stringify(j))); }
         } catch(e) { reject(e); }
       });
     });
@@ -43,6 +62,7 @@ function getAccessToken() {
   });
 }
 
+// Chiamata Google Calendar API
 function gcalRequest(method, gcPath, token, body) {
   return new Promise(function(resolve, reject) {
     var bodyStr = body ? JSON.stringify(body) : "";
@@ -92,15 +112,17 @@ var server = http.createServer(async function(req, res) {
   var parsed = url.parse(req.url, true);
   var path   = parsed.pathname;
 
+  // GET /health
   if (req.method === "GET" && path === "/health") {
-    return sendJson(res, 200, { ok: true, calendar: CALENDAR_ID });
+    return sendJson(res, 200, { ok: true, calendar: CALENDAR_ID, sa: SA_EMAIL });
   }
 
+  // GET /debug
   if (req.method === "GET" && path === "/debug") {
     try {
       var token = await getAccessToken();
-      var now  = new Date().toISOString();
-      var fin  = new Date(); fin.setDate(fin.getDate() + 3);
+      var now   = new Date().toISOString();
+      var fin   = new Date(); fin.setDate(fin.getDate() + 3);
       var calId = encodeURIComponent(CALENDAR_ID);
       var gPath = "/calendar/v3/calendars/" + calId + "/events" +
         "?timeMin=" + encodeURIComponent(now) +
@@ -113,23 +135,26 @@ var server = http.createServer(async function(req, res) {
     }
   }
 
+  // GET /eventi?da=YYYY-MM-DD
   if (req.method === "GET" && path === "/eventi") {
     try {
       var token = await getAccessToken();
-      var da   = parsed.query.da || new Date().toISOString().slice(0,10);
-      var fine = new Date(da); fine.setDate(fine.getDate() + 35);
-      var a    = fine.toISOString().slice(0,10);
+      var da    = parsed.query.da || new Date().toISOString().slice(0,10);
+      var fine  = new Date(da); fine.setDate(fine.getDate() + 35);
+      var a     = fine.toISOString().slice(0,10);
       var calId = encodeURIComponent(CALENDAR_ID);
       var gPath = "/calendar/v3/calendars/" + calId + "/events" +
         "?timeMin=" + encodeURIComponent(da + "T00:00:00Z") +
         "&timeMax=" + encodeURIComponent(a  + "T23:59:59Z") +
         "&singleEvents=true&orderBy=startTime&maxResults=200";
       var r = await gcalRequest("GET", gPath, token, null);
-      if (r.status !== 200) { return sendJson(res, 502, { error: "Errore Google Calendar", detail: r.body }); }
+      if (r.status !== 200) {
+        return sendJson(res, 502, { error: "Errore Google Calendar", detail: r.body });
+      }
       var occupati = {};
       var items = r.body.items || [];
       for (var i = 0; i < items.length; i++) {
-        var ev = items[i];
+        var ev    = items[i];
         var start = ev.start && ev.start.dateTime;
         if (!start) continue;
         var d = start.slice(0,10);
@@ -143,6 +168,7 @@ var server = http.createServer(async function(req, res) {
     }
   }
 
+  // POST /prenota
   if (req.method === "POST" && path === "/prenota") {
     try {
       var body  = await readBody(req);
@@ -151,7 +177,8 @@ var server = http.createServer(async function(req, res) {
         return sendJson(res, 400, { error: "Dati mancanti" });
       }
       var evento = {
-        summary: body.titolo, location: body.luogo || "",
+        summary:     body.titolo,
+        location:    body.luogo       || "",
         description: body.descrizione || "",
         start: { dateTime: body.inizio, timeZone: "Europe/Rome" },
         end:   { dateTime: body.fine,   timeZone: "Europe/Rome" },
@@ -174,12 +201,19 @@ var server = http.createServer(async function(req, res) {
 server.listen(PORT, function() {
   console.log("Server avviato su porta " + PORT);
   console.log("Calendario: " + CALENDAR_ID);
+  console.log("Service Account: " + SA_EMAIL);
+
+  // Ping automatico ogni 10 minuti
   var RENDER_URL = process.env.RENDER_EXTERNAL_URL || ("http://localhost:" + PORT);
   setInterval(function() {
     try {
       var pingUrl = new URL(RENDER_URL + "/health");
       var mod = pingUrl.protocol === "https:" ? https : http;
-      var r = mod.get({ hostname: pingUrl.hostname, path: "/health", port: pingUrl.port || (pingUrl.protocol === "https:" ? 443 : 80) }, function(res) {
+      var r = mod.get({
+        hostname: pingUrl.hostname,
+        path: "/health",
+        port: pingUrl.port || (pingUrl.protocol === "https:" ? 443 : 80)
+      }, function(res) {
         console.log("Ping " + new Date().toLocaleTimeString("it-IT") + " -> " + res.statusCode);
       });
       r.on("error", function(e) { console.log("Ping fallito: " + e.message); });
