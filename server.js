@@ -106,7 +106,7 @@ function readBody(req) {
 async function scriviSuSheet(rigaDati) {
   try {
     var token = await getAccessToken("https://www.googleapis.com/auth/spreadsheets");
-    var path  = "/v4/spreadsheets/"+SHEET_ID+"/values/Foglio1!A:M:append?valueInputOption=USER_ENTERED";
+    var path  = "/v4/spreadsheets/"+SHEET_ID+"/values/Foglio1!A1:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS";
     await sheetsRequest("POST", path, token, {
       values: [rigaDati]
     });
