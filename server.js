@@ -107,9 +107,10 @@ async function scriviSuSheet(rigaDati) {console.log("SCRIVI SHEET CHIAMATA con "
   try {
     var token = await getAccessToken("https://www.googleapis.com/auth/spreadsheets");
     var path  = "/v4/spreadsheets/"+SHEET_ID+"/values/Foglio1!A1:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS";
-    await sheetsRequest("POST", path, token, {
+    var sr = await sheetsRequest("POST", path, token, {
       values: [rigaDati]
     });
+    console.log("SHEET RESPONSE: status="+sr.status+" body="+JSON.stringify(sr.body));
   } catch(e) {
     console.log("ERRORE SHEET COMPLETO: "+String(e)+" | msg="+e.message+" | stack="+e.stack);
   }
