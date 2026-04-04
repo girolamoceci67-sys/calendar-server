@@ -103,7 +103,7 @@ function readBody(req) {
 }
 
 // Scrivi riga su Google Sheet
-async function scriviSuSheet(rigaDati) {
+async function scriviSuSheet(rigaDati) {console.log("SCRIVI SHEET CHIAMATA con "+rigaDati.length+" campi");
   try {
     var token = await getAccessToken("https://www.googleapis.com/auth/spreadsheets");
     var path  = "/v4/spreadsheets/"+SHEET_ID+"/values/Foglio1!A1:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS";
@@ -111,7 +111,7 @@ async function scriviSuSheet(rigaDati) {
       values: [rigaDati]
     });
   } catch(e) {
-    console.log("ERRORE SHEET DETTAGLIO: "+e.message+" | "+JSON.stringify(e));
+    console.log("ERRORE SHEET COMPLETO: "+String(e)+" | msg="+e.message+" | stack="+e.stack);
   }
 }
 
