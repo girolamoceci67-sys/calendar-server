@@ -217,7 +217,7 @@ var server = http.createServer(async function(req, res) {
       var r=await gcalRequest("POST","/calendar/v3/calendars/"+calId+"/events",token,evento);
       if(r.status===200||r.status===201){
         var eventId = r.body.id||"";
-        // Scrivi su Google Sheet
+        console.log("DATI SHEET: nome="+body.nome+" cognome="+body.cognome+" sede="+body.sede+" data="+body.dataLeggibile);// Scrivi su Google Sheet
         var ora = body.inizio ? body.inizio.slice(11,16) : "";
         var oggi = new Date().toLocaleDateString("it-IT");
         await scriviSuSheet([
