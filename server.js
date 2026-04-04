@@ -111,7 +111,7 @@ async function scriviSuSheet(rigaDati) {
       values: [rigaDati]
     });
   } catch(e) {
-    console.log("Errore scrittura Sheet: "+e.message);
+    console.log("ERRORE SHEET DETTAGLIO: "+e.message+" | "+JSON.stringify(e));
   }
 }
 
