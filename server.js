@@ -315,7 +315,7 @@ var server = http.createServer(async function(req, res) {
     } catch(e){return sendJson(res,500,{successo:false,error:e.message});}
   }
 
-  sendJson(res,404,{error:"Endpoint non trovato"});
+  
   sendJson(res,404,{error:"Endpoint non trovato"});
 });
 
