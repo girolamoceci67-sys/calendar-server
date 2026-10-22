@@ -293,7 +293,29 @@ var server = http.createServer(async function(req, res) {
       return sendJson(res,502,{successo:false,error:"Impossibile annullare l'evento"});
     } catch(e){return sendJson(res,500,{successo:false,error:e.message});}
   }
+  // POST /blocca-giorno
+  if(req.method==="POST" && path==="/blocca-giorno"){
+    try {
+      var body  = await readBody(req);
+      var token = await getAccessToken("https://www.googleapis.com/auth/calendar");
+      if(!body.data){return sendJson(res,400,{error:"Data mancante"});}
+      var evento = {
+        summary:     "🔒 STUDIO CHIUSO",
+        description: body.motivo||"Giorno non disponibile",
+        start:{date: body.data},
+        end:  {date: body.data},
+        transparency: "opaque",
+      };
+      var calId = encodeURIComponent(CALENDAR_ID);
+      var r = await gcalRequest("POST","/calendar/v3/calendars/"+calId+"/events",token,evento);
+      if(r.status===200||r.status===201){
+        return sendJson(res,200,{successo:true,eventId:r.body.id});
+      }
+      return sendJson(res,502,{successo:false,error:"Errore Google Calendar"});
+    } catch(e){return sendJson(res,500,{successo:false,error:e.message});}
+  }
 
+  sendJson(res,404,{error:"Endpoint non trovato"});
   sendJson(res,404,{error:"Endpoint non trovato"});
 });
 
